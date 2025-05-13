@@ -1,17 +1,38 @@
 from flask import Flask, jsonify, send_from_directory, request
 import os, requests
 from flask_cors import CORS
+from pymongo import MongoClient
 
+# CONSTANTS
 # directory from which the assets created by the frontend build process are located.
 BUILD_DIR = os.path.join(os.path.dirname(__file__), "build")
+NYT_SAC_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=sacramento&begin_date=20250404&end_date=20250428&timestags.location.includes=california&api-key="
+NYT_DAVIS_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=%22Davis,%20California%22&begin_date=20210301&api-key="
+BASE_NYT_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json"
 
 # flask app init, servers all static files from the build directory to the frontend
 app = Flask(__name__, static_folder=os.path.join(BUILD_DIR), static_url_path='/')
 CORS(app)  # This is the function to allow for different front and backend IP's when developing
 
-NYT_SAC_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=sacramento&begin_date=20250404&end_date=20250428&timestags.location.includes=california&api-key="
-NYT_DAVIS_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=%22Davis,%20California%22&begin_date=20210301&api-key="
-BASE_NYT_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json"
+# mongo connection
+try:
+    mongo_uri = os.getenv("MONGO_URI")
+    db_name = "CommentDB"
+    client = MongoClient(mongo_uri)
+    db = client[db_name] # selecting the database
+    comments_collection = db["comments"] # selecting the collection
+    # connection test
+    client.admin.command('ping')
+    app.logger.info("Connected to MongoDB!")
+except Exception as e:
+    app.logger.error(f"Error connecting to MongoDB: {e}")
+    raise e
+
+# helper for serializing MongoDB ObjectId
+def serialize_doc(doc):
+    if doc and "_id" in doc:
+        doc["_id"] = str(doc["_id"])
+    return doc
 
 def get_key():
     api_key = os.getenv("NYT_API_KEY")
@@ -193,6 +214,10 @@ def serve_frontend(path=""):
     else:
         # for acceptable paths, serve the entry point
         return send_from_directory(BUILD_DIR, 'index.html')
+
+@app.route("/test-mongo")
+def test_mongo():
+    return jsonify({"collections:" : db.list_collection_names() })
 
 
 # actual python script execution starts here

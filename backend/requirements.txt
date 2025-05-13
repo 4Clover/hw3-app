@@ -6,4 +6,4 @@ werkzeug == 2.*
 pytest-mock == 3.14.0
 pytest
 requests
-json
+pymongo == 4.6.1
