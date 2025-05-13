@@ -1,0 +1,495 @@
+@import 'tailwindcss';
+
+@font-face {
+    font-family: "Chomsky";
+    src: url("/fonts/Chomsky-399c.woff") format("woff");
+    font-weight: normal;
+    font-style: normal;
+}
+
+:root {
+    /* Fonts */
+    --font-primary: "Franklin Gothic", sans-serif;
+    --font-secondary: "Helvetica Neue", Helvetica, sans-serif;
+    --font-tertiary: "Arial", sans-serif;
+    --font-title: "Chomsky";
+    --font-body-text: "Georgia", Times, serif;
+
+    /* Colors */
+    --color-black: #000000;
+    --color-white: #ffffff;
+    --color-text-default: #333333;
+    --color-text-muted: #555555;
+    --color-text-light: #666666;
+    --color-text-extra-light: #777777;
+    --color-text-content: #444444;
+    --color-link-default: var(--color-black);
+    --color-link-hover: #676767;
+    --color-border-primary: #e2e2e2;
+    --color-border-subtle: #eeeeee;
+    --color-border-mobile-divider: #dddddd;
+    --color-background-mobile-sidebar: #f4f4f4;
+    --color-button-primary-bg: rgb(50, 104, 145);
+    --color-button-primary-text: var(--color-white);
+    --color-button-primary-hover-bg: #2775c7;
+    --color-divider: #cccccc;
+
+    /* Z-Indexes */
+    --z-sticky-nav: 1000;
+    --z-nav-toggle: 1001;         /* Above sticky nav */
+    --z-overlay: 1050;            /* Above nav-toggle, below sidebar */
+    --z-mobile-sidebar: 1100;     /* Highest */
+
+    /* Layout */
+    --container-max-width: 1200px;
+    --container-padding: 15px;
+}
+
+* { /* all elements a.k.a defaults */
+    box-sizing: border-box; /* padding/border added to elements total width/height */
+    /* remove defaults */
+    margin: 0;
+    padding: 0;
+}
+
+/*##############################################
+      LAYOUT CONTAINERS - Centering content
+################################################*/
+
+header, main, footer {
+    max-width: var(--container-max-width);
+    margin: 0 auto; /* center content horizontally */
+    padding: 0 var(--container-padding); /* horizontal padding for narrow windows, stops edge contact */
+}
+
+/*##############################################
+              GENERAL LINK STYLING
+################################################*/
+
+a {
+    color: var(--color-link-default); /* default link color */
+    text-decoration: none; /* no default underline */
+}
+
+a:hover, a:focus {
+    /* text-decoration: underline; feedback on hover/focus */
+    color: var(--color-link-hover); /* Mimicking more of New York Times' aesthetic */
+}
+
+/*##############################################
+                 HEADER SECTION
+################################################*/
+
+header {
+    /*border-bottom: 1px solid var(--color-black); !* line separating header and main content *!*/
+    /*padding-bottom: 10px; !* space between content and border *!*/
+    margin-bottom: 10px; /* space between header and main */
+}
+
+/*---------------------------------------------
+    Top Bar - Search, Language, Login
+----------------------------------------------*/
+.top-bar {
+    display: flex; /* flexbox */
+    justify-content: space-between;
+    align-items: center; /* vertical align */
+    padding: 4px 0;
+    font-size: 1em;
+    font-family: var(--font-tertiary);
+    color: var(--color-text-muted); /* text color */
+    border-bottom: none; /* ensure no inherited border */
+}
+
+.login-button {
+    padding: 5px 6px; /* inside the button */
+    background-color: var(--color-button-primary-bg);
+    color: var(--color-button-primary-text); /* text color */
+    border: 1px solid var(--color-button-primary-bg);
+    border-left-width: 5px;
+    border-right-width: 5px;
+    cursor: pointer; /* feedback on hover */
+    font-size: 0.7em;
+    border-radius: 3px; /* rounded corners */
+    text-transform: uppercase;
+    margin-right: 7px;
+    font-weight: 700;
+    font-family: var(--font-secondary);
+}
+
+.login-button:hover {
+    background-color: var(--color-button-primary-hover-bg); /* hover feedback */
+    border-left-width: 5px;
+    border-right-width: 5px;
+    border-color: var(--color-button-primary-hover-bg);
+    text-decoration: none;
+    background-blend-mode: luminosity;
+}
+
+.top-bar-center {
+    align-content: center; /* needed for login button padding */
+    color: #e0e0e0 !important;
+}
+
+
+.top-bar-center a {
+    color: var(--color-text-muted); /* language link color */
+}
+
+.top-bar-center a:hover {
+    box-shadow: 0 0 0 5px rgb(0 0 0 / 4%);
+    text-decoration: none;
+    background-color: transparent;
+    background-blend-mode: luminosity;
+}
+
+.top-bar-center span {
+    padding-left: 5px; /* link spacing */
+    padding-right: 5px;
+    text-transform: uppercase;
+    font-size: 0.75em;
+    font-stretch: expanded;
+}
+
+/* TODO: Search */
+/*---------------------------------------------
+   Title Bar - Date, Main Title, Market Widget
+----------------------------------------------*/
+.title-bar {
+    display: flex; /* flexbox */
+    justify-content: space-between;
+    align-items: center; /* vertical align */
+    padding-top: 0;
+    transform: translateY(-5px);
+    text-align: center; /* default */
+}
+
+.title-bar-left { /* Date */
+    text-align: left;
+    font-family: var(--font-secondary); /* date font */
+    font-size: 0.9em;
+}
+
+.title-bar h1 { /* Main Title */
+    font-family: var(--font-title);
+    font-weight: bold;
+    font-size: 3.5em;
+    margin: 0; /* remove default margin */
+    flex-grow: 1; /* title fills available space, fixes centering oddities */
+    text-align: center;
+}
+
+.title-bar-right { /* Market Widget */
+    text-align: right;
+}
+
+/*############################################
+         MAIN NAVIGATION BAR - Desktop
+ #############################################*/
+
+.main-nav-bar {
+    /*border-top: 1px solid var(--color-border-primary); !* line above nav *!*/
+    border-bottom: 1px solid var(--color-black); /* line below nav */
+    padding: 8px 0;
+    position: relative; /* required for absolute positioning of children */
+}
+
+.main-nav-bar ul {
+    list-style-type: none; /* no list icon */
+    display: flex; /* horizontal layout */
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 15px; /* item spacing */
+}
+
+.main-nav-bar li {
+    display: inline-block; /* overrides flex, items stay on same line  */
+}
+
+.main-nav-bar a {
+    color: var(--color-text-default); /* link color */
+    text-transform: uppercase;
+    font-size: 0.9em;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+}
+
+.main-nav-bar-divider { /* "|" divider in the nav */
+    color: var(--color-divider);
+    margin: 0 5px; /* spacing needed for intended visual */
+    font-weight: normal;
+}
+
+/*############################################
+             STICKY NAVIGATION BAR
+ #############################################*/
+
+.main-nav-bar.isSticky { /* enabled via JS */
+    position: fixed; /* stuck to window */
+    top: 0;
+    left: 0;
+    right: 0; /* position at top of page */
+    width: 100%; /* span full page width */
+    background-color: var(--color-white); /* cover content beneath */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* shadow for depth */
+    z-index: var(--z-sticky-nav); /* nav stays above most content */
+    /* padding to align with main content */
+    padding-left: calc((100vw - var(--container-max-width)) / 2 + var(--container-padding));
+    padding-right: calc((100vw - var(--container-max-width)) / 2 + var(--container-padding));
+}
+
+/* Query response for sticky nav padding when window is narrower than the max-width */
+@media (max-width: 1200px) { /* Matches --container-max-width, effectively */
+    .main-nav-bar.isSticky {
+        /* revert to default padding */
+        padding-left: var(--container-padding);
+        padding-right: var(--container-padding);
+    }
+}
+
+/*############################################
+          MOBILE NAVIGATION & SIDEBAR
+ #############################################*/
+/* Hamburger Menu Toggle Button */
+.nav-toggle {
+    display: none; /* hidden by default */
+    background: none;
+    border: none;
+    font-size: 1.8em; /* icon size */
+    cursor: pointer; /* pointer on hover */
+    padding: 0; /* icon padding */
+    position: relative; /* relative to the .main-nav-bar */
+    /*top: -25px; !* center vertically *!*/
+    transform: translateY(-50%); /* force centering via translate */
+    z-index: var(--z-nav-toggle); /* above nav bar, below opened sidebar */
+}
+
+/* Mobile Sidebar Container */
+.mobile-sidebar {
+    position: fixed; /* position relative to window */
+    top: 0;
+    left: -280px; /* offscreen to the left at top of page */
+    width: 250px;
+    height: 100%; /* full window height */
+    background-color: var(--color-background-mobile-sidebar);
+    padding: 50px 20px 20px; /* inside padding, space for close button */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2); /* separation shadow on right */
+    transition: left 0.3s ease-in-out; /* slide animation */
+    z-index: var(--z-mobile-sidebar); /* sidebar above all content via global */
+    overflow-y: auto; /* scrolling if content overflows */
+}
+
+/* Sidebar open state (changed via JS) */
+.mobile-sidebar.open {
+    left: 0; /* move sidebar into view */
+}
+
+.mobile-sidebar ul {
+    list-style: none;
+}
+
+.mobile-sidebar li {
+    margin-bottom: 15px; /* vertical item spacing */
+}
+
+.mobile-sidebar a {
+    color: var(--color-text-default);
+    font-size: 1.1em;
+    display: block; /* makes list area clickable */
+}
+
+/* Divider line (mobile) */
+.mobile-sidebar .mobile-divider {
+    border: none;
+    border-top: 1px solid var(--color-border-mobile-divider); /* thin line at top */
+    margin: 15px 0; /* spacing for visual clarity */
+}
+
+/* Mobile Sidebar Close Button */
+.close-mobile-sidebar {
+    position: absolute; /* relative to the .mobile-sidebar */
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2em;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+/* Dimmer for mobile sidebar */
+.overlay {
+    display: none; /* default hidden */
+    position: fixed; /* covers full window  */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* semi-transparent black background */
+    z-index: var(--z-overlay); /* below sidebar, above main content */
+}
+
+/* Sidebar open dimmer state (changed via JS) */
+.overlay.active {
+    display: block; /* make visible */
+}
+
+/*############################################
+        MAIN CONTENT AREA - Articles Grid
+ #############################################*/
+
+.content-grid {
+    display: grid; /* grid layout */
+    gap: 25px; /* spacing b/n items */
+    grid-template-columns: repeat(3, 1fr); /* 3 equal-width columns */
+}
+
+/* Articles within the columns */
+.content-column article {
+    margin-bottom: 25px; /* below article */
+    padding-bottom: 15px; /* internal space b4 border */
+    border-bottom: 1px solid var(--color-border-subtle); /* subtle line b/n articles */
+}
+
+/* Removes bottom border and margin for last articles in columns */
+.content-column article:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+/* Article headlines */
+article h2.headline {
+    font-size: 1.4em;
+    margin-bottom: 5px;
+    font-family: var(--font-body-text);
+    font-weight: bold;
+}
+
+/* Article images */
+.article-image {
+    display: block; /* image on own line */
+    width: 100%; /* image changes based on window size */
+    height: auto; /* auto aspect ratio */
+    margin: 10px 0; /* vertical spacing */
+    object-fit: cover; /* scales to container size, preserves aspect ratio, can crop */
+}
+
+/* Article author */
+article .author {
+    font-size: 0.8em;
+    color: var(--color-text-extra-light);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+/* Article content (text) */
+article .content {
+    font-size: 0.95em;
+    color: var(--color-text-content);
+    margin-bottom: 10px;
+}
+
+/*############################################
+                FOOTER SECTION
+ #############################################*/
+
+footer {
+    margin-top: 40px; /* space above footer */
+    padding-top: 20px;
+    padding-bottom: 20px;
+    text-align: center;
+    border-top: 1px solid var(--color-border-primary); /* line above footer */
+    font-size: 0.85em;
+    color: var(--color-text-light);
+}
+
+.footer-nav-bar ul { /* list formatting */
+    list-style: none;
+    gap: 10px; /* relevant if lots of footer links */
+}
+
+.footer-nav-bar a {
+    color: var(--color-text-light);
+    text-decoration: none;
+}
+
+.footer-nav-bar li { /* item formatting */
+    display: inline-block; /* items grow horizontally */
+    margin: 0 10px; /* item spacing */
+}
+
+/*############################################
+                 MEDIA QUERIES
+ #############################################*/
+
+/* Medium / Tablet (~1024px and below) */
+@media (max-width: 1024px) {
+    .title-bar h1 {
+        font-size: 2.2em; /* scale title down */
+    }
+
+    .main-nav-bar {
+        font-size: 0.8em;
+    }
+
+    .content-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2-column layout */
+    }
+}
+
+/* Small / Mobile (~767px and below) */
+@media (max-width: 767px) {
+    .top-bar {
+        display: none; /* scale down */
+    }
+
+    .top-bar-center {
+        display: none;
+    } /* hide languages, TODO: Add language links to mobile nav */
+
+    /* stack title elements vertically */
+    .title-bar {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .title-bar-left, .title-bar-right {
+        display: none;
+        /*text-align: center; !* force centering *!*/
+        /*margin-top: 5px; !* add space b/n items *!*/
+        /*flex-basis: auto; !* reset flex-size *!*/
+    }
+
+    .market-widget {
+        display: none;
+    }
+
+    .title-bar h1 {
+        font-size: 1.8em; /* scale down title */
+        margin-top: 10px; /* add small space above */
+        order: -1; /* moves title to top of page */
+        transform: translateY(10px);
+    }
+    .main-nav-bar ul {
+        display: none; /* hide desktop nav */
+    }
+
+    .nav-toggle {
+        display: block; /* show mobile-nav hamburger toggle */
+        font-size: 2em;
+        transform: translateY(0);
+    }
+
+    .content-grid {
+        grid-template-columns: 1fr; /* single column layout */
+    }
+
+    /* Footer adjustments */
+    footer {
+        font-size: 0.8em; /* scale down text */
+    }
+
+    .footer-nav-bar li {
+        display: block; /* links stack vertically */
+        margin: 5px 0; /* spacing between links */
+    }
+}
