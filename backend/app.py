@@ -1,3 +1,6 @@
+import time
+
+from bson import ObjectId
 from flask import Flask, jsonify, send_from_directory, request
 import os, requests
 from flask_cors import CORS
@@ -26,7 +29,7 @@ try:
     app.logger.info("Connected to MongoDB!")
 except Exception as e:
     app.logger.error(f"Error connecting to MongoDB: {e}")
-    raise e
+    exit(print(e))
 
 # helper for serializing MongoDB ObjectId
 def serialize_doc(doc):
@@ -40,6 +43,56 @@ def get_key():
         app.logger.error("NYT_API_KEY environment variable not set.")
         return None
     return api_key
+
+# ------------ MONGO API ENDPOINTS ---------------
+@app.route("/api/comments", methods=["POST"])
+def add_comment():
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data or 'author' not in data:
+            return jsonify({"error": "Missing author or text in request"}), 400
+
+        comment = {
+            "text": data["text"],
+            "author": data["author"],
+            "timestamp" : time.localtime(time.time())
+        }
+        result = comments_collection.insert_one(comment)
+        insert_id_str = str(result.inserted_id)
+        return jsonify({"message" : "Comment added!", "id": insert_id_str}), 201
+
+    except Exception as error:
+        app.logger.error(f"Error adding comment: {error}")
+        return jsonify(f"Error adding comment: {error}"), 500
+
+@app.route("/api/comments", methods=["GET"])
+def get_comments():
+    try:
+        # fetch all comments, then sort by timestamp
+        current_all_comments = list(comments_collection.find().sort("timestamp", -1))
+        # serialize comments
+        serialized_comments = [serialize_doc(comment) for comment in current_all_comments]
+        return jsonify(serialized_comments), 200
+
+    except Exception as error:
+        app.logger.error(f"Error fetching comments: {error}")
+        return jsonify(f"Error fetching comments: {error}"), 500
+
+# unsure if will be used but here
+@app.route("/api/comments/<comment_id>", methods=["GET"])
+def get_comment(comment_id): # get a comment by a single ID
+    try:
+        comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
+        if comment:
+            return jsonify(serialize_doc(comment)), 200
+        else:
+            return jsonify({"error": "Comment not found"}), 404
+    except Exception as error:
+        app.logger.error(f"Error fetching comment by ID: {error}")
+        return jsonify(f"Error fetching comment by ID: {error}"), 500
+
+# TODO: Add moderator change, delete, and update endpoints
+# Redacted text per HW should be replaced with Unicode character 'FULL BLOCK' (U+2588)
 
 # alyssa -------------------------------------------------
 @app.get('/api/searchArticles')
