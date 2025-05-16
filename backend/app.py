@@ -25,7 +25,6 @@ try:
     db = client[db_name] # selecting the database
     comments_collection = db["comments"] # selecting the collection
     # connection test
-    client.admin.command('ping')
     app.logger.info("Connected to MongoDB!")
 except Exception as e:
     app.logger.error(f"Error connecting to MongoDB: {e}")
@@ -282,4 +281,5 @@ if __name__ == "__main__":
     print(f"Listening on http://localhost:{port}")
     # run the flask server on the host="0.0.0.0" which lets the server be seen externally
     # port is the determiner for where on the network it is accessible
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)  # can set threaded = true for multiple requests at once
+    debug_mode = os.getenv('FLASK_ENV') != 'production'
+    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)  # can set threaded = true for multiple requests at once
