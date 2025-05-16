@@ -50,6 +50,16 @@
     let observerInitialized: boolean = false;
     let isThrottled: boolean = false;
     let throttleTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    
+    // Comment Side Panel State
+    let isCommentPanelOpen: boolean = true;
+    // When comment button clicked, set the comment panel to true
+    function openCommentPanel(){
+        isCommentPanelOpen = true;
+    }
+    function closeCommentPanel(){
+        isCommentPanelOpen = false;
+    }
 
     // --- UI Update Functions ---
     function updateDate() {
@@ -378,7 +388,16 @@
 												{/if}
 												<p class="author">{article.author}</p>
 												<p class="content">{article.content}</p>
+                                                <button class="comments"
+                                                        aria-label="Open Comment Side Panel"
+                                                        on:click={openCommentPanel}>Comments</button>
 										</article>
+                                        <!-- COMMENT PANEL -->
+                                        <aside class="comment-panel" class:open={isCommentPanelOpen} id="comment-panel">
+                                            <h2>{article.headline}</h2>
+                                            <hr>
+                                            <p>No comments available right now...</p>
+                                        </aside>
 								{/each}
 						</div>
 						
