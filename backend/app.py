@@ -4,7 +4,7 @@ from bson import ObjectId
 from flask import Flask, jsonify, send_from_directory, request
 import os, requests
 from flask_cors import CORS
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 
 # CONSTANTS
 # directory from which the assets created by the frontend build process are located.
@@ -15,20 +15,19 @@ BASE_NYT_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json"
 
 # flask app init, servers all static files from the build directory to the frontend
 app = Flask(__name__, static_folder=os.path.join(BUILD_DIR), static_url_path='/')
-CORS(app)  # This is the function to allow for different front and backend IP's when developing
+CORS(app)  # this is the function to allow for different front and backend IP's when developing
 
 # mongo connection
+comments_collection = None # init to none due to mongo type oddities
 try:
     mongo_uri = os.getenv("MONGO_URI")
-    db_name = "CommentDB"
     client = MongoClient(mongo_uri)
-    db = client[db_name] # selecting the database
-    comments_collection = db["comments"] # selecting the collection
-    # connection test
-    app.logger.info("Connected to MongoDB!")
+    db_name = "CommentDB"
+    db = client[db_name]
+    comments_collection = db["comments"]
+    app.logger.info(f"Connected to MongoDB! Database: {db.name}. Comments collection ready.")
 except Exception as e:
-    app.logger.error(f"Error connecting to MongoDB: {e}")
-    exit(print(e))
+    app.logger.error(f"Error connecting to MongoDB or comments collection: {e}")
 
 # helper for serializing MongoDB ObjectId
 def serialize_doc(doc):
@@ -38,60 +37,97 @@ def serialize_doc(doc):
 
 def get_key():
     api_key = os.getenv("NYT_API_KEY")
-    if not api_key:
+    if not api_key or api_key == "super_secret_key":
         app.logger.error("NYT_API_KEY environment variable not set.")
         return None
     return api_key
 
+
 # ------------ MONGO API ENDPOINTS ---------------
 @app.route("/api/comments", methods=["POST"])
 def add_comment():
+    if comments_collection is None:
+        return jsonify({"error": "Database service not available"}), 503
     try:
         data = request.get_json()
-        if not data or 'text' not in data or 'author' not in data:
-            return jsonify({"error": "Missing author or text in request"}), 400
+        # check if formatting matches frontend
+        if not data or 'content' not in data or 'author' not in data or 'articleId' not in data:
+            return jsonify({"error": "Missing articleId, author, or content in request"}), 400
 
-        comment = {
-            "text": data["text"],
+        comment_doc = {
+            "articleId": str(data["articleId"]), # str cast to ensure consistency
             "author": data["author"],
-            "timestamp" : time.localtime(time.time())
+            "content": data["content"],
+            "timestamp": time.time(),  # UNIX timestamp (float)
+            "removed": False,
+            "removedBy": ""
         }
-        result = comments_collection.insert_one(comment)
-        insert_id_str = str(result.inserted_id)
-        return jsonify({"message" : "Comment added!", "id": insert_id_str}), 201
+        result = comments_collection.insert_one(comment_doc)
+
+        # new comment in frontend structure
+        created_comment_response = {
+            "id": str(result.inserted_id),
+            "articleId": comment_doc["articleId"],
+            "author": comment_doc["author"],
+            "content": comment_doc["content"],
+            "removed": comment_doc["removed"],
+            "removedBy": comment_doc["removedBy"],
+            "timestamp": comment_doc["timestamp"]
+        }
+        return jsonify(created_comment_response), 201
 
     except Exception as error:
-        app.logger.error(f"Error adding comment: {error}")
-        return jsonify(f"Error adding comment: {error}"), 500
+        app.logger.error(f"Error adding comment: {error}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(error)}"}), 500
+
+def serialize_comment_for_frontend(comment_doc):
+    if not comment_doc:
+        return None
+    return {
+        "id": str(comment_doc["_id"]),
+        "articleId": comment_doc.get("articleId", ""), # must be present
+        "author": comment_doc.get("author", "Anonymous"),
+        "content": comment_doc.get("content", ""),
+        "removed": comment_doc.get("removed", False),
+        "removedBy": comment_doc.get("removedBy", ""),
+        "timestamp": comment_doc.get("timestamp")
+    }
 
 @app.route("/api/comments", methods=["GET"])
-def get_comments():
+def get_all_comments():
+    if comments_collection is None:
+        return jsonify({"error": "Database service not available"}), 503
     try:
-        # fetch all comments, then sort by timestamp
-        current_all_comments = list(comments_collection.find().sort("timestamp", -1))
-        # serialize comments
-        serialized_comments = [serialize_doc(comment) for comment in current_all_comments]
+        # fetch and sort by newest (DESCENDING)
+        all_db_comments = list(comments_collection.find().sort("timestamp", DESCENDING))
+
+        serialized_comments = [serialize_comment_for_frontend(comment) for comment in all_db_comments]
+        # filter None's i.e., failed or missing data
+        serialized_comments = [c for c in serialized_comments if c and c.get("articleId")]
+
         return jsonify(serialized_comments), 200
 
     except Exception as error:
-        app.logger.error(f"Error fetching comments: {error}")
-        return jsonify(f"Error fetching comments: {error}"), 500
+        app.logger.error(f"Error fetching comments: {error}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(error)}"}), 500
 
-# unsure if will be used but here
+# unused current, I think useful for moderation
 @app.route("/api/comments/<comment_id>", methods=["GET"])
-def get_comment(comment_id): # get a comment by a single ID
+def get_comment_by_id(comment_id):
+    if comments_collection is None:
+        return jsonify({"error": "Database service not available"}), 503
     try:
         comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
         if comment:
-            return jsonify(serialize_doc(comment)), 200
+            return jsonify(serialize_comment_for_frontend(comment)), 200
         else:
             return jsonify({"error": "Comment not found"}), 404
     except Exception as error:
-        app.logger.error(f"Error fetching comment by ID: {error}")
-        return jsonify(f"Error fetching comment by ID: {error}"), 500
+        app.logger.error(f"Error fetching comment by ID: {error}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(error)}"}), 500
 
 # TODO: Add moderator change, delete, and update endpoints
-# Redacted text per HW should be replaced with Unicode character 'FULL BLOCK' (U+2588)
+# Redacted text per HW should be replaced with Unicode character 'FULL BLOCK' (U+2588) -- possibly done via frontend?
 
 # alyssa -------------------------------------------------
 @app.get('/api/searchArticles')
@@ -251,7 +287,23 @@ def fetch_nyt_articles():
         app.logger.error(f"An error occurred while fetching NYT articles: {e}")
         return jsonify({"error": "An unexpected error occurred. Please try again later."}), 500
 
-# Serving the HTML frontend for the app.
+
+@app.route("/test/test-mongo")
+def test_mongo_connection():
+    if not client: # check if client exists
+        return jsonify({"error": "MongoDB client not initialized"}), 503
+    try:
+        server_info = client.server_info() # "pings" the server
+        return jsonify({
+            "message": "Successfully connected to MongoDB!",
+            "server_version": server_info.get('version'),
+            "collections": db.list_collection_names() if not db is None else "Database not initialized" # must be None comparison as object isnt truth/falsy
+        })
+    except Exception as e:
+        app.logger.error(f"MongoDB connection test failed: {e}")
+        return jsonify({"error": f"MongoDB connection test failed: {str(e)}"}), 500
+
+# server frontend HTML (svelte)
 @app.route("/")
 @app.route("/<path:path>")
 def serve_frontend(path=""):
@@ -259,17 +311,15 @@ def serve_frontend(path=""):
     if path != "" and os.path.exists(static_file_path):
         # prevent directory traversal
         if os.path.abspath(static_file_path).startswith(os.path.abspath(app.static_folder)):
-            return send_from_directory(app.static_folder, path)
+            return send_from_directory(app.static_folder, path), 200
         else:
             # path is outside the static folder, deny access
             return "Not Found", 404
     else:
         # for acceptable paths, serve the entry point
-        return send_from_directory(BUILD_DIR, 'index.html')
+        return send_from_directory(BUILD_DIR, 'index.html'), 200
 
-@app.route("/test-mongo")
-def test_mongo():
-    return jsonify({"collections:" : db.list_collection_names() })
+
 
 
 # actual python script execution starts here
@@ -282,4 +332,4 @@ if __name__ == "__main__":
     # run the flask server on the host="0.0.0.0" which lets the server be seen externally
     # port is the determiner for where on the network it is accessible
     debug_mode = os.getenv('FLASK_ENV') != 'production'
-    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)  # can set threaded = true for multiple requests at once
+    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)  # set threaded = true for multiple requests at once
