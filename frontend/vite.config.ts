@@ -24,14 +24,15 @@ export default defineConfig(({ mode }) => ({
   plugins: [sveltekit(), tailwindcss()],
   server: mode === 'development' ? {
     proxy: {
-      '/api/test_articles': {
-        target: 'http://localhost:8000',
+      // changed to single as a catch-all for /api/* calls
+      '/api': {
+        target: 'http://backend:8000', // backend is service in Docker
         changeOrigin: true,
-        secure: false,
+        secure: false, // Usually false for http targets
         configure: configureProxy
       },
-      '/api/search': {
-        target: 'http://localhost:8000',
+      '/test/test-mongo': { // change for testing possibly
+        target: 'http://backend:8000',
         changeOrigin: true,
         secure: false,
         configure: configureProxy

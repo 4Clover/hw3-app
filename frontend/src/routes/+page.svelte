@@ -2,9 +2,9 @@
     import {onMount, onDestroy} from 'svelte'; // functions to activate on component mount and dismount from the DOM
     import {BROWSER} from 'esm-env'; // sveltekit environment variable, used to check if user is in the browser or not
     import '../app.css'; // global CSS file
-    // TODO: check if can remove after static renderer change
-    export const ssr = false; // fixes a build error since sveltekit is meant to be server-side rendered, not statically generated/served
-
+    import CommentSection from '$lib/CommentSection.svelte';
+    import type { Comment as CommentType } from '$lib/CommentSection.svelte';
+    
     interface Article { // format of the data received from the backend
         id: number,
         headline: string,
@@ -13,16 +13,29 @@
         imageUrl: string | null,
         articleUrl: string
     }
-
+	
+    // --- Comment type reference ---
+    // Comment {
+    //     id: string;
+    //     author: string;
+    //     content: string;
+    //     articleId: string;
+    //     removed: boolean;
+    //     removedBy: string;
+    //     timestamp?: number; // optional
+    // }
+    
+	
     // --- Constants ---
     const THROTTLE_DELAY = 1000; // in milliseconds i.e. 1 second
     const RESIZE_DEBOUNCE_DELAY = 150; // milliseconds
     const API_BASE_QUERY = 'sacramento';
     const API_BEGIN_DATE = '20230401';
     const API_FILTER_LOCATION = 'timesTags.location.includes=california';
+    const REMOVED_TEXT_FILL = '&block';
 
     // --- Component State ---
-
+	
     // UI State
     let currentDate: string = 'Loading Date...';
     let currentYear: string = new Date().getFullYear().toString();
@@ -39,7 +52,13 @@
     let articles: Article[] = [];
     let articlesError: string | null = null;
     let useMockApi: boolean = false; // true if testing (PRIOR: fake_articles)
-
+    
+    // Comments State
+    let allComments: CommentType[] = [];
+    let commentsError: string | null = null;
+    let isLoadingComments: boolean = true;
+    let postCommentErrors: { [articleId: string]: string | null } = {};
+    
     // Infinite Scroll State
     let isLoadingInitArticles: boolean = true;
     let isLoadingMoreArticles: boolean = false;
@@ -50,16 +69,6 @@
     let observerInitialized: boolean = false;
     let isThrottled: boolean = false;
     let throttleTimeoutId: ReturnType<typeof setTimeout> | null = null;
-    
-    // Comment Side Panel State
-    let isCommentPanelOpen: boolean = true;
-    // When comment button clicked, set the comment panel to true
-    function openCommentPanel(){
-        isCommentPanelOpen = true;
-    }
-    function closeCommentPanel(){
-        isCommentPanelOpen = false;
-    }
 
     // --- UI Update Functions ---
     function updateDate() {
@@ -190,6 +199,82 @@
         }
     }
 
+    // --- Comment Fetch and Post functions ---
+    async function fetchAllComments() {
+        isLoadingComments = true;
+        commentsError = null;
+        try {
+            const response = await fetch('/api/comments');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+                throw new Error(`HTTP error ${response.status}: ${errorData.error || response.statusText}`);
+            }
+            const fetchedComments: CommentType[] = await response.json();
+            if (!Array.isArray(fetchedComments)) {
+                throw new Error("Invalid comments data format from API.");
+            }
+            allComments = fetchedComments.map(c => ({...c, id: String(c.id), articleId: String(c.articleId)}));
+        } catch (e: any) {
+            console.error('Failed to fetch comments:', e);
+            commentsError = e.message || 'Unknown error loading comments.';
+            allComments = [];
+        } finally {
+            isLoadingComments = false;
+        }
+    }
+
+
+    // The 'event' parameter will now be the detail object directly
+    async function handleCommentPost(detail: { articleId: string; author: string; content: string }) {
+        const { articleId, author, content } = detail; // destructure from detail object (unbox)
+        postCommentErrors = { ...postCommentErrors, [articleId]: null };
+
+        try {
+            // fetch POST formatting
+            const response = await fetch('/api/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ articleId, author, content })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+                throw new Error(errorData.error || `Failed to post comment (status: ${response.status})`);
+            }
+
+            await fetchAllComments(); // refetch after post to update UI
+        } catch (e: any) {
+            console.error(`Failed to post comment for article ${articleId}:`, e);
+            postCommentErrors = { ...postCommentErrors, [articleId]: e.message || 'Unknown error posting comment.' };
+        }
+    }
+    
+    // TODO: MODERATION
+    // --- Moderate Comment ---
+    
+    
+    // --- Moderate Parts of a Comment ---
+    
+    
+    
+    // TESTER FUNCTION -- not in use other than initial check for DB connection
+    async function testGetAndLogComments() {
+        console.log('Testing MongoDB by fetching comments from /api/comments...');
+        try {
+            const response = await fetch('/api/comments');
+            if (!response.ok) {
+                console.error(`HTTP error! Status: ${response.status}`);
+                const errorBody = await response.text();
+                console.error('Error response body:', errorBody);
+                return;
+            }
+            const testData = await response.json();
+            console.log('Comments from /api/comments (testGetAndLogComments): \n', testData);
+        } catch (error) {
+            console.error('Failed to fetch /api/comments in testGetAndLogComments:', error);
+        }
+    }
+    
     // --- Intersection Observer Callback ---
     function onIntersection(entries: IntersectionObserverEntry[]) {
         const entry = entries[0];
@@ -215,8 +300,10 @@
     onMount(() => {
         if (!BROWSER) return;
         updateDate();
-        fetchArticlesPage(currentPage); // init fetch
-
+        fetchArticlesPage(currentPage); // init articles fetch
+        fetchAllComments(); // init comments fetch
+        testGetAndLogComments(); // testing MongoDB via actual data fetching
+	    
         if (mainNavElement) {
             setTimeout(() => {
                 updateStickyPoint(); // on mount calculation
@@ -363,16 +450,12 @@
 <div class="main-content-area" style="{isSticky ? `padding-top: ${navHeight}px;` : ''}">
 		<main id="main-content">
 				{#if isLoadingInitArticles}
-						<!-- Show initial loading message -->
 						<p>Loading Articles...</p>
 				{:else if articlesError && articles.length === 0}
-						<!-- Show error only if no articles were loaded -->
 						<p style="color: red;">Error Loading Articles: {articlesError}</p>
 				{:else if articles.length === 0 && !isLoadingInitArticles}
-						<!-- Show no articles message only after initial load -->
 						<p>No articles were found.</p>
 				{:else}
-						<!-- Display articles in the grid -->
 						<div class="content-grid">
 								{#each articles as article (article.id)}
 										<article>
@@ -388,38 +471,26 @@
 												{/if}
 												<p class="author">{article.author}</p>
 												<p class="content">{article.content}</p>
-                                                <button class="comments"
-                                                        aria-label="Open Comment Side Panel"
-                                                        on:click={openCommentPanel}>Comments</button>
+												<!-- CommentSection component added here -->
+												<CommentSection
+														articleId={String(article.id)}
+														commentsForArticle={allComments.filter(c => String(c.articleId) === String(article.id))}
+														isLoading={isLoadingComments && allComments.filter(c => String(c.articleId) === String(article.id)).length === 0}
+														postError={postCommentErrors[article.id] || null}
+														onCommentPost={handleCommentPost}
+												/>
 										</article>
-                                        <!-- COMMENT PANEL -->
-                                        <aside class="comment-panel" class:open={isCommentPanelOpen} id="comment-panel">
-                                            <h2>{article.headline}</h2>
-                                            <hr>
-                                            <p>No comments available right now...</p>
-                                        </aside>
 								{/each}
 						</div>
 						
-						<!-- Loading indicator -->
-						{#if isLoadingMoreArticles}
-								<p style="text-align: center; padding: 20px;">Loading more articles...</p>
-						{/if}
-						
-						<!-- "End of results" message -->
-						{#if !hasMoreArticles && articles.length > 0}
-								<p style="text-align: center; padding: 20px; color: #666;">You've reached the end of the articles.</p>
-						{/if}
-						
-						<!-- Error message if shown alongside existing articles -->
-						{#if articlesError && articles.length > 0}
-								<p style="text-align: center; padding: 20px; color: red;">Error loading more articles: {articlesError}</p>
-						{/if}
-						
-						<!-- Element for Watcher -->
-						{#if hasMoreArticles}
-								<div bind:this={infinitePointElement} style="height: 10px;"></div>
-						{/if}
+						<!-- Loading / State Indicators -->
+						{#if isLoadingMoreArticles} <p>Loading more articles...</p> {/if}
+						{#if !hasMoreArticles && articles.length > 0} <p>You've reached the end.</p> {/if}
+						{#if articlesError && articles.length > 0} <p>Error loading more: {articlesError}</p> {/if}
+						{#if hasMoreArticles} <div bind:this={infinitePointElement} style="height: 10px;"></div> {/if}
+				{/if}
+				{#if commentsError && allComments.length === 0}
+						<p style="text-align: center; padding: 20px; color: red;">Could not load comments: {commentsError}</p>
 				{/if}
 		</main>
 </div>
