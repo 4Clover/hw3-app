@@ -237,21 +237,12 @@ def parse_article_data(article_doc): # renamed 'article' to 'article_doc' to avo
         # aria image text here?
         article_id = article_doc.get('_id', None)
         web_url = article_doc.get('web_url', '#') # fallback to '#'
-        image_url = None
+        image_url = multimedia.get('default').get('url')
 
         # article_id required for column population on frontend
         if not article_id:
             app.logger.error(f"Article missing _id: {article_doc}")
             return None # skip if no ID
-
-        # type check for if the multimedia of an article even exits or is properly formatted
-        if multimedia and isinstance(multimedia, list) and len(multimedia) > 0:
-            # Iterate to find a suitable image, e.g., subtype 'xlarge' or 'wide', or just the first one
-            for media_item in multimedia:
-                if isinstance(media_item, dict) and media_item.get('type') == 'image' and media_item.get('url'):
-                    image_url = media_item.get('url')
-                    # NYT image URLs are often relative, frontend will prepend nytimes.com
-                    break # take first image -- possibly wrong given updated API
 
         return { # dictionary
             'id': article_id,

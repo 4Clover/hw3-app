@@ -118,8 +118,6 @@ header {
 
 .login-button:hover {
     background-color: var(--color-button-primary-hover-bg); /* hover feedback */
-    border-left-width: 5px;
-    border-right-width: 5px;
     border-color: var(--color-button-primary-hover-bg);
     text-decoration: none;
     background-blend-mode: luminosity;
@@ -387,6 +385,34 @@ article .content {
     color: var(--color-text-content);
     margin-bottom: 10px;
 }
+
+.article-content-area { /* New wrapper for main content of article to help with layout */
+    flex-grow: 1; /* Allows this area to expand, pushing actions to the bottom. */
+    /* margin-bottom: 10px; /* Optional: if you want space between content and button */
+}
+
+.article-actions { /* Container for the "Open" comments button */
+    display: flex;
+    justify-content: flex-end; /* Aligns button to the right */
+    padding-top: 10px;      /* Space above the button */
+    margin-top: auto;       /* Pushes this section to the bottom if .article-card is flex-column */
+}
+
+.open-comments-panel-button { /* Styling for the "Open" button on each article */
+    background-color: var(--color-text-muted, #555555); /* Using your CSS variable, with fallback */
+    color: var(--color-white, #ffffff);
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-family: var(--font-primary, "Franklin Gothic", sans-serif);
+}
+
+.open-comments-panel-button:hover {
+    background-color: var(--color-text-default, #333333); /* Darker on hover */
+}
+
 
 /*############################################
                 FOOTER SECTION
