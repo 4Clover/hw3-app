@@ -1,10 +1,13 @@
 import time
 
 from bson import ObjectId
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, redirect, session
 import os, requests
 from flask_cors import CORS
 from pymongo import MongoClient, DESCENDING
+from authlib.common.security import generate_token
+from authlib.integrations.flask_client import OAuth
+
 
 # CONSTANTS
 # directory from which the assets created by the frontend build process are located.
@@ -17,6 +20,27 @@ BASE_NYT_URL = "https://api.nytimes.com/svc/search/v2/articlesearch.json"
 app = Flask(__name__, static_folder=os.path.join(BUILD_DIR), static_url_path='/')
 CORS(app)  # this is the function to allow for different front and backend IP's when developing
 
+app.secret_key = os.urandom(24)
+
+
+oauth = OAuth(app)
+
+nonce = generate_token()
+
+# ---------- DEX SET UP  ----------
+oauth.register(
+    name=os.getenv('OIDC_CLIENT_NAME'),
+    client_id=os.getenv('OIDC_CLIENT_ID'),
+    client_secret=os.getenv('OIDC_CLIENT_SECRET'),
+    #server_metadata_url='http://dex:5556/.well-known/openid-configuration',
+    authorization_endpoint="http://localhost:5556/auth",
+    token_endpoint="http://dex:5556/token",
+    jwks_uri="http://dex:5556/keys",
+    userinfo_endpoint="http://dex:5556/userinfo",
+    device_authorization_endpoint="http://dex:5556/device/code",
+    client_kwargs={'scope': 'openid email profile'}
+)
+
 # mongo connection
 comments_collection = None # init to none due to mongo type oddities
 try:
@@ -25,7 +49,11 @@ try:
     db_name = "CommentDB"
     db = client[db_name]
     comments_collection = db["comments"]
+    # this collection tracks articles and comments under the 
     app.logger.info(f"Connected to MongoDB! Database: {db.name}. Comments collection ready.")
+    # adding users collection to keep track of users in database
+    users_collection = db["users"]
+    app.logger.info(f"Database {db.name} successfully created collection: users!")
 except Exception as e:
     app.logger.error(f"Error connecting to MongoDB or comments collection: {e}")
 
@@ -42,6 +70,33 @@ def get_key():
         return None
     return api_key
 
+# ------------ DEX API ENDPOINTS ---------------
+@app.route('/')
+def get_user():
+    user = session.get('user')
+    if user:
+        return {user['email']}
+    return f"No user found."
+
+@app.route('/api/login')
+def login():
+    session['nonce'] = nonce
+    redirect_uri = 'http://localhost:8000/authorize'
+    return oauth.flask_app.authorize_redirect(redirect_uri, nonce=nonce)
+
+@app.route('/api/authorize')
+def authorize():
+    token = oauth.flask_app.authorize_access_token()
+    nonce = session.get('nonce')
+
+    user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)  # or use .get('userinfo').json()
+    session['user'] = user_info
+    return redirect('/')
+
+@app.route('/api/logout')
+def logout():
+    session.clear()
+    return redirect('/')
 
 # ------------ MONGO API ENDPOINTS ---------------
 @app.route("/api/comments", methods=["POST"])
@@ -113,6 +168,11 @@ def get_all_comments():
 
 # unused current, I think useful for moderation
 @app.route("/api/comments/<comment_id>", methods=["GET"])
+# TODO: get_comment_count function that gets num of comments per post for frontend display :)
+def get_comment_count():
+    count = 0
+    return count
+
 def get_comment_by_id(comment_id):
     if comments_collection is None:
         return jsonify({"error": "Database service not available"}), 503
@@ -304,7 +364,7 @@ def test_mongo_connection():
         return jsonify({"error": f"MongoDB connection test failed: {str(e)}"}), 500
 
 # server frontend HTML (svelte)
-@app.route("/")
+
 @app.route("/<path:path>")
 def serve_frontend(path=""):
     static_file_path = os.path.join(app.static_folder, path)
