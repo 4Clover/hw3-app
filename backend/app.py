@@ -57,6 +57,28 @@ try:
 except Exception as e:
     app.logger.error(f"Error connecting to MongoDB or comments collection: {e}")
 
+# Initialize users in database
+def initialize_users():
+    users_collection.insert_one({
+        "email": "admin@hw3.com",
+        "hash": "$2b$10$8NoCpIs/Z6v0s/pU9YxYIO10uWyhIVOS2kmNac9AD0HsqRhP5dUie", 
+        "username": "admin",
+        "userID": "123"
+    })
+    users_collection.insert_one({
+        "email": "moderator@hw3.com",
+        "hash": "$2b$12$2aaoZyVjMWvoCq.DmCUECOGoW0oaBCyzSluUm3BpLrP26sVT71PSC", 
+        "username": "moderator",
+        "userID": "456"
+    })
+    users_collection.insert_one({
+        "email": "user@hw3.com",
+        "hash": "$2b$12$321HomfT164U9f5l.xQaYuHThGCss8PRPNy8t./tq8Frgr6UYeEka", 
+        "username": "user",
+        "userID": "789"
+    })
+    print("Initialized all users...")
+
 # helper for serializing MongoDB ObjectId
 def serialize_doc(doc):
     if doc and "_id" in doc:
@@ -71,12 +93,12 @@ def get_key():
     return api_key
 
 # ------------ DEX API ENDPOINTS ---------------
-@app.route('/')
+@app.route('/api/getUser')
 def get_user():
     user = session.get('user')
     if user:
-        return {user['email']}
-    return f"No user found."
+        return jsonify({"user_email": {user['email']}})
+    return jsonify({"no_email": ""})
 
 @app.route('/api/login')
 def login():
@@ -364,7 +386,7 @@ def test_mongo_connection():
         return jsonify({"error": f"MongoDB connection test failed: {str(e)}"}), 500
 
 # server frontend HTML (svelte)
-
+@app.route('/')
 @app.route("/<path:path>")
 def serve_frontend(path=""):
     static_file_path = os.path.join(app.static_folder, path)
@@ -391,5 +413,9 @@ if __name__ == "__main__":
     print(f"Listening on http://localhost:{port}")
     # run the flask server on the host="0.0.0.0" which lets the server be seen externally
     # port is the determiner for where on the network it is accessible
+    
+    # initialize dex auth users into database
+    print(f"Initializing dex authorized users into the database...")
+    initialize_users()
     debug_mode = os.getenv('FLASK_ENV') != 'production'
     app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)  # set threaded = true for multiple requests at once

@@ -59,6 +59,9 @@
     let isLoadingComments: boolean = true;
     let postCommentErrors: { [articleId: string]: string | null } = {};
     
+    // User state
+    let userFound: boolean = false;
+
     // Infinite Scroll State
     let isLoadingInitArticles: boolean = true;
     let isLoadingMoreArticles: boolean = false;
@@ -296,6 +299,28 @@
         }
     }
 
+    let userEmail: string = "";
+    async function isLoggedIn()
+    {
+        const response = await fetch('/api/getUser');
+        if (!response.ok) {
+            console.error(`HTTP error! Status: ${response.status}`);
+            const errorBody = await response.text();
+            console.error('Error response body:', errorBody);
+            return;
+        }
+        const userData = await response.json();
+        if (userData.user_email)
+        {
+            userFound = true;
+            userEmail = userData.user_email;
+        }
+        else
+        {
+            userFound = false; // for safety purposes
+            userEmail = "null"; // for safety purposes
+        }
+    }
     // --- Lifecycle Hooks ---
     onMount(() => {
         if (!BROWSER) return;
@@ -303,7 +328,8 @@
         fetchArticlesPage(currentPage); // init articles fetch
         fetchAllComments(); // init comments fetch
         testGetAndLogComments(); // testing MongoDB via actual data fetching
-	    
+	    isLoggedIn();
+
         if (mainNavElement) {
             setTimeout(() => {
                 updateStickyPoint(); // on mount calculation
@@ -374,7 +400,10 @@
 						<span><a href="# ">中文</a></span>
 				</div>
 				<div id="top-bar-right">
-						<button class="login-button">Log In</button>
+                    <!-- TODO: Make side panel for My Account to show userEmail and log out button -->
+					{#if userFound} <a href="#" >My Account</a> 
+                    {:else} <button class='login-button'><a href='/api/login'>Log In</a></button>
+                    {/if}
 				</div>
 		</div>
 		<!-- Title bar -->
