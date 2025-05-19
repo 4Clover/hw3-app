@@ -10,7 +10,7 @@ web:
 staticClients:
   - id: ${OIDC_CLIENT_ID}
     redirectURIs:
-      - http://localhost:8000/auth/callback
+      - http://localhost:8000/api/authorize
     name: ${OIDC_CLIENT_NAME}
     secret: ${OIDC_CLIENT_SECRET}
 
