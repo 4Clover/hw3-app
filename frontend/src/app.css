@@ -386,20 +386,19 @@ article .content {
     margin-bottom: 10px;
 }
 
-.article-content-area { /* New wrapper for main content of article to help with layout */
-    flex-grow: 1; /* Allows this area to expand, pushing actions to the bottom. */
-    /* margin-bottom: 10px; /* Optional: if you want space between content and button */
+.article-content-area {
+    flex-grow: 1;
 }
 
-.article-actions { /* Container for the "Open" comments button */
+.article-actions {
     display: flex;
-    justify-content: flex-end; /* Aligns button to the right */
-    padding-top: 10px;      /* Space above the button */
-    margin-top: auto;       /* Pushes this section to the bottom if .article-card is flex-column */
+    justify-content: flex-end;
+    padding-top: 10px;
+    margin-top: auto;
 }
 
-.open-comments-panel-button { /* Styling for the "Open" button on each article */
-    background-color:#ffffff; /* Using your CSS variable, with fallback */
+.open-comments-panel-button {
+    background-color:#ffffff;
     color: #9b9b9b;
     border: 1px solid #bababa;
     padding: 6px 12px;

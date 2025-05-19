@@ -311,8 +311,8 @@
     
     
 
-    // filters all comments that are specific to this article 
-    // gets the length of this 
+    // filters all comments that are specific to this article
+    // gets the length of this
     function numberOfComments(articleId: string): number{
         return allComments.filter(comments => String(comments.articleId) == String(articleId)).length;
     }
