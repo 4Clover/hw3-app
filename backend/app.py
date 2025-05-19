@@ -7,6 +7,7 @@ from flask_cors import CORS
 from pymongo import MongoClient, DESCENDING
 from authlib.common.security import generate_token
 from authlib.integrations.flask_client import OAuth
+from functools import wraps
 
 
 # CONSTANTS
@@ -69,6 +70,8 @@ except Exception as e:
 
 # removed serializer as Mongo has internal function for this
 
+# ---------- HELPER FUNCTIONS ----------
+
 def get_key():
     api_key = os.getenv("NYT_API_KEY")
     # check for if not set or template placeholder is present
@@ -87,25 +90,74 @@ def get_user():
 
 @app.route('/api/me')
 def current_user_api():
-    user_info = session.get('user')
-    if user_info:
+    user_session_data = session.get('user')
+    app.logger.info(f"[/api/me] User session data from session: {user_session_data}")
+
+    if user_session_data:
+        user_id_for_check = user_session_data.get('userID')
+        username_for_check = user_session_data.get('username')
+
         role = "user" # default role
-
-        if user_info.get('username') == 'moderator' or user_info.get('userID') == '456': # based on Dex staticPasswords
-            role = "moderator"
-
-        elif user_info.get('username') == 'admin' or user_info.get('userID') == '123': # ''                          ''
+        # role checking
+        if str(user_id_for_check) == '123': # dex user id for admin
             role = "admin"
+            app.logger.info(f"[/api/me] User ID '{user_id_for_check}' matches ADMIN_ID '123'. Role set to 'admin'.")
+        elif str(user_id_for_check) == '456': # dex user id for moderator
+            role = "moderator"
+            app.logger.info(f"[/api/me] User ID '{user_id_for_check}' matches MODERATOR_ID '456'. Role set to 'moderator'.")
+        elif username_for_check == 'admin' and role == 'user':
+            role = "admin"
+            app.logger.info(f"[/api/me] Username '{username_for_check}' matches 'admin'. Role set to 'admin'.")
+        elif username_for_check == 'moderator' and role == 'user':
+            role = "moderator"
+            app.logger.info(f"[/api/me] Username '{username_for_check}' matches 'moderator'. Role set to 'moderator'.")
+
+
+        app.logger.info(f"[/api/me] Final determined role: '{role}' for userID: '{user_id_for_check}', username: '{username_for_check}'")
 
         return jsonify({
             "loggedIn": True,
-            "email": user_info.get('email'),
-            "username": user_info.get('username'), # display name
-            "userID": user_info.get('userID'), # dex user ID
-            "role": role # user, moderator, admin
+            "email": user_session_data.get('email'),
+            "username": username_for_check,
+            "userID": user_id_for_check,
+            "role": role
         }), 200
 
     return jsonify({"loggedIn": False}), 200
+
+
+def role_required(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user_session_data = session.get('user')
+            app.logger.info(f"[role_required] User session data: {user_session_data}")
+
+            if not user_session_data:
+                return jsonify({"error": "Authentication required"}), 401
+
+            user_id_for_check = user_session_data.get('userID')
+            username_for_check = user_session_data.get('username')
+
+            user_role = "user" # default role
+            if str(user_id_for_check) == '123':
+                user_role = "admin"
+            elif str(user_id_for_check) == '456':
+                user_role = "moderator"
+            elif username_for_check == 'admin' and user_role == 'user':
+                user_role = "admin"
+            elif username_for_check == 'moderator' and user_role == 'user':
+                user_role = "moderator"
+
+            app.logger.info(f"[role_required] Determined role: '{user_role}' for userID: '{user_id_for_check}', username: '{username_for_check}'. Allowed: {allowed_roles}")
+
+            if user_role not in allowed_roles:
+                return jsonify({"error": "Forbidden: Insufficient privileges"}), 403
+
+            kwargs['moderator_info'] = user_session_data
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 @app.route('/api/login')
 def login():
@@ -152,20 +204,46 @@ def authorize():
         app.logger.error(f"Error parsing ID token or invalid nonce for client '{REGISTERED_OIDC_CLIENT_NAME}': {e}", exc_info=True)
         return "Invalid token or authentication session.", 400 # bad req or unauthorized
 
-    session['user'] = user_info # store parsed user data in for flask
+    try:
+        oauth_client = getattr(oauth, REGISTERED_OIDC_CLIENT_NAME)
+        parsed_claims = oauth_client.parse_id_token(token, nonce=retrieved_nonce) # dict of claims
+        app.logger.info(f"[/api/authorize] Parsed ID token claims from Authlib: {parsed_claims}")
 
-    if users_collection is not None and user_info.get('userID'):
-        users_collection.update_one(
-            {'dex_user_id': user_info['userID']},
-            {'$set': {
-                'email': user_info.get('email'),
-                'username': user_info.get('username'),
-                'last_login': time.time()
-            }},
-            upsert=True # create user if not exists, update if exists
-        )
+        dex_user_id = parsed_claims.get('sub') # subject claim
+        dex_email = parsed_claims.get('email') # should be admin@hw3.com, etc.
 
-    return redirect('http://localhost:5173/')
+        authlib_username_claim = parsed_claims.get('username') # what authlib maps
+        dex_internal_username_log = "admin"
+
+        session_user_data = {
+            'email': dex_email,
+            'userID': dex_user_id,
+            'username': parsed_claims.get('name') or authlib_username_claim or dex_email.split('@')[0], # fallback chain
+            'raw_claims': parsed_claims # store all claims for debugging
+        }
+
+        app.logger.info(f"[/api/authorize] Data to be stored in session['user']: {session_user_data}")
+        session['user'] = session_user_data
+
+        if users_collection is not None and session_user_data.get('userID'):
+            users_collection.update_one(
+                {'dex_user_id': session_user_data['userID']},
+                {'$set': {
+                    'email': session_user_data.get('email'),
+                    'username': session_user_data.get('username'), # display name
+                    'last_login': time.time()
+                }},
+                upsert=True
+            )
+        else:
+            app.logger.warning(f"[/api/authorize] userID not found in session_user_data or users_collection is None. User DB update skipped. session_user_data: {session_user_data}")
+
+
+        return redirect('http://localhost:5173/') # svelte
+
+    except Exception as e:
+        app.logger.error(f"Error during authorize_access_token or parsing for '{REGISTERED_OIDC_CLIENT_NAME}': {e}", exc_info=True)
+        return "Error processing authentication.", 500
 
 @app.route('/api/logout')
 def logout():
@@ -179,8 +257,6 @@ def add_comment():
         return jsonify({"error": "Database service not available"}), 503
     try:
         data = request.get_json()
-        # check if formatting matches frontend
-        # author is no longer sent from frontend, will be "TEMP - Anon" until TODO: Dex OAuth
         if not data or 'content' not in data or 'articleId' not in data:
             return jsonify({"error": "Missing articleId or content in request"}), 400
 
@@ -279,7 +355,67 @@ def get_comment_by_id(comment_id):
         app.logger.error(f"Error fetching comment by ID '{comment_id}': {error}", exc_info=True)
         return jsonify({"error": f"Internal server error: {str(error)}"}), 500
 
-# TODO: Add moderator change, delete, and update endpoints
+# ----------------- MODERATION ENDPOINTS ------------------
+@app.route("/api/comments/<comment_id>/moderate", methods=["PUT"])
+@role_required(["admin", "moderator"]) # Protect this endpoint
+def moderate_comment(comment_id, moderator_info): # moderator_info injected by decorator
+    if comments_collection is None:
+        return jsonify({"error": "Database service not available"}), 503
+
+    if not ObjectId.is_valid(comment_id):
+        return jsonify({"error": "Invalid comment ID format"}), 400
+
+    data = request.get_json()
+    if not data or "action" not in data:
+        return jsonify({"error": "Missing 'action' in request body (e.g., 'delete_full', 'redact_partial')"}), 400
+
+    action = data.get("action")
+    moderator_name = moderator_info.get('username', moderator_info.get('email', "Unknown Moderator"))
+
+    update_fields = {
+        "removed": True,
+        "removedBy": moderator_name,
+        "moderationTimestamp": time.time()
+    }
+
+    if action == "delete_full":
+        update_fields["content"] = "Comment has been deleted by moderation."
+    elif action == "redact_partial":
+        new_content = data.get("new_content")
+        if new_content is None: # Check for None, empty string might be valid for full clear by mistake
+            return jsonify({"error": "Missing 'new_content' for redaction"}), 400
+        update_fields["content"] = new_content # frontend sends the block characters
+    else:
+        return jsonify({"error": f"Invalid moderation action: {action}"}), 400
+
+    try:
+        result = comments_collection.update_one(
+            {"_id": ObjectId(comment_id)},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Comment not found"}), 404
+
+        if result.modified_count == 0 and result.matched_count > 0:
+            # comment was already in target state
+            app.logger.info(f"Comment {comment_id} was matched but not modified by moderation. State might have been identical.")
+
+
+        # fetch updated comment
+        updated_comment_doc = comments_collection.find_one({"_id": ObjectId(comment_id)})
+        if not updated_comment_doc:
+            # if matched_count > 0 will not happen
+            return jsonify({"error": "Failed to retrieve comment after moderation"}), 500
+
+        return jsonify(serialize_comment_for_frontend(updated_comment_doc)), 200
+
+    except Exception as e:
+        app.logger.error(f"Error moderating comment {comment_id}: {e}", exc_info=True)
+        return jsonify({"error": f"Internal server error during moderation: {str(e)}"}), 500
+
+
+
 # Redacted text per HW should be replaced with Unicode character 'FULL BLOCK' (U+2588) -- possibly done via frontend?
 
 # removed Alyssa code so future tests use current implementations
