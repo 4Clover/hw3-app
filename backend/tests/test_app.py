@@ -67,50 +67,83 @@ def test_bad_search(client):
 
 # ----- COMMENT & DEX UNIT TESTS -----
 
-def test_add_comment(client):
+def test_add_comment(client, monkeypatch):
+    
+    # mock mongoDB so we don't need it to run this route
+    class TestCollection:
+        def insert_one(self, doc):
+            class Result:
+                inserted_id = "fakeID"
+            return Result()
+    
+    
+    import app
+    app.comments_collection = TestCollection()
     fake_comment ={
         "articleId": "123",
-        "author": "Alyssa",
+        "author": "TEMP - Anon",
         "content": "I love puppies!"
     }
-    response = client.get(f'/api/comments', json=fake_comment)
+    response = client.post(f'/api/comments', json=fake_comment)
     assert response.status_code == 201
     comment = response.get_json()
     assert comment["articleId"] == "123"
-    assert comment["author"] == "Alyssa"
+    assert comment["author"] == "TEMP - Anon"
     assert comment["content"] == "I love puppies!"
     # timestamp and id are randomly generated but removed should be false
     assert comment["removed"] is False
 
 
-def test_login(client, monkeypatch):
+def test_login(client):
+    import os
+    os.environ['OIDC_CLIENT_NAME'] = 'Flask App'
     class MockOAuthClient:
-        def redirect_to_authorize(self, redirect_uri, **kwargs):
+        def authorize_redirect(self, redirect_uri, **kwargs):
             from flask import redirect
             return redirect("http://fake-oauth-website.com/auth")
     
-    # Using: https://docs.python.org/3/tutorial/controlflow.html#lambda-expressions
-    # to mock the getattr function
-    monkeypatch.setattr("app.getattr", lambda obj, name: MockOAuthClient)
+    # this passes mock OAuth registry
+    class MockOAuth:
+        pass
+    # Using this: https://docs.python.org/3/library/functions.html#setattr
+    # to help with mocking getattr(oauth, client_name)
+    setattr(MockOAuth, "Flask App", MockOAuthClient())
+    
+    # replace the real OAuth registry with the fake
+    import app
+    app.oauth = MockOAuth()
 
     response = client.get('/api/login')
     assert response.status_code in (302, 303)
-    assert response.data == b"http://fake-oauth-website.com/auth" 
+    assert response.headers["Location"] == "http://fake-oauth-website.com/auth" 
 
 
-def test_authorize(client, monkeypatch):
+def test_authorize(client):
+    import os
+    os.environ['OIDC_CLIENT_NAME'] = 'Flask App'
     class MockOAuthClient:
-        def authorize_token(self):
-            return {"fake_token": "456"}
-        def parse_token(self, token, nonce=None):
+        def authorize_access_token(self):
+            return {"id_token": "456"}
+        def parse_id_token(self, token, nonce=None):
             return {
                 "email": "blah@fakeemail.com",
                 "username": "testUserName",
                 "userID": "789",
             }
-    monkeypatch.setattr("app.getattr", lambda obj, name: MockOAuthClient())
-    # Using: https://flask.palletsprojects.com/en/stable/testing/
-    # to simulate a session with a nonce
+    class MockOAuth:
+        pass
+    
+    setattr(MockOAuth, "Flask App", MockOAuthClient())
+    import app
+    app.oauth = MockOAuth()
+
+    # mock Users Collection
+    class TestUsersCollection:
+        def update_one(self, *args, **kwargs):
+            return None
+    
+    app.users_collection = TestUsersCollection()
+
     with client.session_transaction() as mock_session:
         mock_session['nonce'] = 'test'
     
