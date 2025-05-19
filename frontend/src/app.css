@@ -399,9 +399,9 @@ article .content {
 }
 
 .open-comments-panel-button { /* Styling for the "Open" button on each article */
-    background-color:#c9c9c9; /* Using your CSS variable, with fallback */
-    color: #1b1b1b;
-    border: none;
+    background-color:#ffffff; /* Using your CSS variable, with fallback */
+    color: #9b9b9b;
+    border: 1px solid #bababa;
     padding: 6px 12px;
     border-radius: 8px;
     cursor: pointer;
