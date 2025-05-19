@@ -352,10 +352,6 @@ def fetch_nyt_articles():
     processed_articles = []
 
     search_query = request.args.get('query')
-    # Removed the strict validation for search_query to allow more flexibility,
-    # but you might want to add some basic sanitization or validation.
-    # if search_query not in ['davis', 'sacramento', ...]: # Your original check
-    #     return jsonify({"error": f"Invalid search query: {search_query}. Please try again later."}), 400
 
     search_begin_date = request.args.get('begin_date')
     search_end_date = request.args.get('end_date')
