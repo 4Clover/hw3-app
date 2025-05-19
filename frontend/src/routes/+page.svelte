@@ -5,6 +5,7 @@
     import CommentSection from '$lib/CommentSection.svelte';
     import type { PostNewCommentDetail, PostNewReplyDetail } from '$lib/CommentSection.svelte';
     import type { Comment as CommentType } from '$lib/CommentItem.svelte';
+    import { userStore, fetchUserStatus } from '$lib/stores/userStore.svelte';
     
     interface Article { // type returned from backend api call
         id: string;
@@ -280,7 +281,7 @@
     // --- Infinite Scroll Observer Function ---
     function onIntersection(entries: IntersectionObserverEntry[]) {
         const entry = entries[0];
-        let canScroll : boolean = $state(!isLoadingMoreArticles && !isLoadingInitArticles && !isThrottled);
+        let canScroll : boolean = !isLoadingMoreArticles && !isLoadingInitArticles && !isThrottled;
         if (entry.isIntersecting && hasMoreArticles && canScroll) {
             isThrottled = true;
             currentPage++; // iterate page for viewing on activate
@@ -300,6 +301,7 @@
         updateDate();
         fetchArticlesPage(currentPage);
         fetchAllComments();
+        fetchUserStatus();
 
         if (mainNavElement) {
             setTimeout(() => {
@@ -375,7 +377,14 @@
 						<span><a href="# ">U.S.</a></span><span><a href="# ">International</a></span>
 						<span><a href="# ">Canada</a></span><span><a href="# ">Español</a></span><span><a href="# ">中文</a></span>
 				</div>
-				<div id="top-bar-right"><button class="login-button">Log In</button></div>
+				<div id="top-bar-right">
+						{#if $userStore?.loggedIn}
+						<span>Hello, {$userStore.username || $userStore.email}!</span>
+						<a href="/api/logout" class="login-button" style="margin-left: 10px;">Log Out</a>
+						{:else}
+						<a href="/api/login" class="login-button">Log In</a>
+						{/if}
+				</div>
 		</div>
 		<div class="title-bar">
 				<div class="title-bar-left"><span id="current-date">{currentDate}</span></div>
@@ -523,7 +532,10 @@
         transition: transform 0.3s ease-out;
         display: flex;
         flex-direction: column;
-        position: relative;
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: calc(var(--z-overlay, 1040) + 1);
     }
     .comments-side-panel.open {
         transform: translateX(0%);
@@ -546,7 +558,12 @@
     .comments-panel-close-button:hover {
         color: var(--color-text-default, #333333);
     }
-
+    #top-bar-right span {
+        margin-right: 10px;
+        color: var(--color-text-muted);
+    }
+    
+    
     @media (max-width: 767px) {
         .comments-side-panel {
             width: 80%;

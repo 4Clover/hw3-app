@@ -23,12 +23,24 @@ app.secret_key = os.urandom(24)
 
 
 oauth = OAuth(app)
+REGISTERED_OIDC_CLIENT_NAME = os.getenv('OIDC_CLIENT_NAME', 'NAME_NOT_SET')
+if REGISTERED_OIDC_CLIENT_NAME == 'NAME_NOT_SET':
+    app.logger.warning(
+        "OIDC_CLIENT_NAME env var not set, using default. ISSUES INBOUND.")
+elif not REGISTERED_OIDC_CLIENT_NAME.isidentifier():
+    app.logger.error(
+        # we love good logging messages, right?
+        f"OIDC_CLIENT_NAME ('{REGISTERED_OIDC_CLIENT_NAME}') is not a valid Python identifier. Authlib client access will fail. Please fix in .env.dev.")
+    raise ValueError(f"OIDC_CLIENT_NAME ('{REGISTERED_OIDC_CLIENT_NAME}') must be a valid Python identifier.")
+
+
+
 
 nonce = generate_token()
 
 # ---------- DEX SET UP  ----------
 oauth.register(
-    name=os.getenv('OIDC_CLIENT_NAME'),
+    name=REGISTERED_OIDC_CLIENT_NAME,
     client_id=os.getenv('OIDC_CLIENT_ID'),
     client_secret=os.getenv('OIDC_CLIENT_SECRET'),
     #server_metadata_url='http://dex:5556/.well-known/openid-configuration',
@@ -73,20 +85,87 @@ def get_user():
         return {user['email']}
     return f"No user found."
 
+@app.route('/api/me')
+def current_user_api():
+    user_info = session.get('user')
+    if user_info:
+        role = "user" # default role
+
+        if user_info.get('username') == 'moderator' or user_info.get('userID') == '456': # based on Dex staticPasswords
+            role = "moderator"
+
+        elif user_info.get('username') == 'admin' or user_info.get('userID') == '123': # ''                          ''
+            role = "admin"
+
+        return jsonify({
+            "loggedIn": True,
+            "email": user_info.get('email'),
+            "username": user_info.get('username'), # display name
+            "userID": user_info.get('userID'), # dex user ID
+            "role": role # user, moderator, admin
+        }), 200
+
+    return jsonify({"loggedIn": False}), 200
+
 @app.route('/api/login')
 def login():
-    session['nonce'] = nonce
-    redirect_uri = 'http://localhost:8000/authorize'
-    return oauth.flask_app.authorize_redirect(redirect_uri, nonce=nonce)
+    current_nonce = generate_token()
+    session['nonce'] = current_nonce
+    redirect_uri = 'http://localhost:8000/api/authorize'
+
+    try:
+        oauth_client = getattr(oauth, REGISTERED_OIDC_CLIENT_NAME)
+        return oauth_client.authorize_redirect(redirect_uri, nonce=current_nonce)
+    except AttributeError:
+        app.logger.error(f"Authlib client '{REGISTERED_OIDC_CLIENT_NAME}' not found.")
+        return "OAuth client configuration error (login).", 500
+    except Exception as e:
+        app.logger.error(f"Unexpected error during authorize_redirect for {REGISTERED_OIDC_CLIENT_NAME}: {e}", exc_info=True)
+        # check dex logs if this errors
+        return "OAuth initiation error.", 500
 
 @app.route('/api/authorize')
 def authorize():
-    token = oauth.flask_app.authorize_access_token()
-    nonce = session.get('nonce')
+    if not REGISTERED_OIDC_CLIENT_NAME: # env load check
+        app.logger.error("OIDC client name not available during /api/authorize.")
+        return "OAuth client configuration error (authorize: name missing).", 500
+    try:
+        oauth_client = getattr(oauth, REGISTERED_OIDC_CLIENT_NAME)
+        token = oauth_client.authorize_access_token()
+    except AttributeError:
+        app.logger.error(f"Authlib client '{REGISTERED_OIDC_CLIENT_NAME}' not found on oauth object during authorize_access_token. Check registration name.")
+        return "OAuth client configuration error (authorize: client not found).", 500
+    except Exception as e:
+        app.logger.error(f"Error during authorize_access_token for '{REGISTERED_OIDC_CLIENT_NAME}': {e}", exc_info=True)
+        # check dex logs if this errors
+        return "Error obtaining access token from provider.", 500
 
-    user_info = oauth.flask_app.parse_id_token(token, nonce=nonce)  # or use .get('userinfo').json()
-    session['user'] = user_info
-    return redirect('/')
+    retrieved_nonce = session.pop('nonce', None) # get and remove nonce
+    if not retrieved_nonce:
+        app.logger.warning("Nonce not found in session during /api/authorize callback. This could be a security risk or indicate a flow issue.")
+
+    try:
+        user_info = oauth_client.parse_id_token(token, nonce=retrieved_nonce)
+        # `token` is the dictionary containing id_token, access_token, etc.
+        # parse_id_token = token['id_token']
+    except Exception as e:
+        app.logger.error(f"Error parsing ID token or invalid nonce for client '{REGISTERED_OIDC_CLIENT_NAME}': {e}", exc_info=True)
+        return "Invalid token or authentication session.", 400 # bad req or unauthorized
+
+    session['user'] = user_info # store parsed user data in for flask
+
+    if users_collection is not None and user_info.get('userID'):
+        users_collection.update_one(
+            {'dex_user_id': user_info['userID']},
+            {'$set': {
+                'email': user_info.get('email'),
+                'username': user_info.get('username'),
+                'last_login': time.time()
+            }},
+            upsert=True # create user if not exists, update if exists
+        )
+
+    return redirect('http://localhost:5173/')
 
 @app.route('/api/logout')
 def logout():
@@ -105,9 +184,15 @@ def add_comment():
         if not data or 'content' not in data or 'articleId' not in data:
             return jsonify({"error": "Missing articleId or content in request"}), 400
 
+        user_session_info = session.get('user')
+        author_name = "TEMP - Anon" # default if not logged in or no username
+        if user_session_info:
+            # p]refer username from Dex staticPasswords, fallback to email
+            author_name = user_session_info.get('username', user_session_info.get('email', "TEMP - Anon"))
+
         comment_doc = {
             "articleId": str(data["articleId"]), # str cast to ensure consistency
-            "author": "TEMP - Anon", # TODO: Dex OAuth
+            "author": author_name,
             "content": data["content"],
             "timestamp": time.time(),  # UNIX timestamp (float)
             "removed": False,
@@ -150,7 +235,7 @@ def serialize_comment_for_frontend(comment_doc):
     return {
         "id": str(comment_doc["_id"]),
         "articleId": comment_doc.get("articleId", ""), # must be present
-        "author": comment_doc.get("author", "TEMP - Anon"), # TODO: Dex OAuth
+        "author": comment_doc.get("author", "Anonymous"),
         "content": comment_doc.get("content", ""),
         "removed": comment_doc.get("removed", False),
         "removedBy": comment_doc.get("removedBy", ""),
