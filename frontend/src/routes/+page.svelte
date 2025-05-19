@@ -321,6 +321,17 @@
             userEmail = "null"; // for safety purposes
         }
     }
+
+    // using this resource to help me with window location! 
+    // https://www.w3schools.com/js/js_window_location.asp
+    function handleLogin() {
+        window.location.href = 'api/login';
+
+    }
+    function handleLogout() {
+        window.location.href = 'api/logout';
+    }
+
     // --- Lifecycle Hooks ---
     onMount(() => {
         if (!BROWSER) return;
@@ -401,8 +412,12 @@
 				</div>
 				<div id="top-bar-right">
                     <!-- TODO: Make side panel for My Account to show userEmail and log out button -->
-					{#if userFound} <a href="#" >My Account</a> 
-                    {:else} <button class='login-button'><a href='/api/login'>Log In</a></button>
+					{#if userFound} 
+                    <span>
+                        <a href="#" >My Account</a>
+                        <button class='login-button' on:click={handleLogout}>Log Out</button>
+                    </span>
+                    {:else} <button class='login-button' on:click={handleLogin}>Log In</button>
                     {/if}
 				</div>
 		</div>
