@@ -278,6 +278,11 @@
         }
     }
 
+    // filters all comments that are specific to this article 
+    // gets the length of this 
+    function numberOfComments(articleId: string): number{
+        return allComments.filter(comments => String(comments.articleId) == String(articleId)).length;
+    }
     // --- Infinite Scroll Observer Function ---
     function onIntersection(entries: IntersectionObserverEntry[]) {
         const entry = entries[0];
@@ -455,7 +460,8 @@
 																class="open-comments-panel-button"
 																onclick={() => openCommentsPanel(String(article.id), article.headline)}
 														>
-																Open
+                                                                <span>{numberOfComments(article.id)}</span>
+																💬
 														</button>
 												</div>
 										</article>
