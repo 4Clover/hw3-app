@@ -2,8 +2,6 @@
 # Following the basic structure on how to use pytest because I have never used it before
 # Testing on: http://127.0.0.1:8000
 
-# Using monkeypatch to mock oauth ! 
-# https://docs.pytest.org/en/stable/how-to/monkeypatch.html
 
 import sys
 import os
@@ -67,7 +65,7 @@ def test_bad_search(client):
 
 # ----- COMMENT & DEX UNIT TESTS -----
 
-def test_add_comment(client, monkeypatch):
+def test_add_comment(client):
     
     # mock mongoDB so we don't need it to run this route
     class TestCollection:
@@ -75,15 +73,16 @@ def test_add_comment(client, monkeypatch):
             class Result:
                 inserted_id = "fakeID"
             return Result()
-    
-    
+
     import app
     app.comments_collection = TestCollection()
+    
     fake_comment ={
         "articleId": "123",
         "author": "TEMP - Anon",
         "content": "I love puppies!"
     }
+
     response = client.post(f'/api/comments', json=fake_comment)
     assert response.status_code == 201
     comment = response.get_json()
