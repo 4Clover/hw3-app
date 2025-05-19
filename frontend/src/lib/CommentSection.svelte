@@ -21,6 +21,7 @@
         postError?: string | null;
         onPostNewComment: (detail: PostNewCommentDetail) => void;
         onPostNewReply: (detail: PostNewReplyDetail) => void;
+        onModerateComment: (detail: { commentId: string; action: 'delete_full' | 'redact_partial'; newContent?: string }) => Promise<boolean>;
     }
 
     let {
@@ -30,7 +31,8 @@
         isLoading = false,
         postError = null,
         onPostNewComment,
-        onPostNewReply
+        onPostNewReply,
+        onModerateComment
     }: CommentSectionProps = $props();
 
     let newCommentContent = $state('');
@@ -79,6 +81,7 @@
 </script>
 
 <div class="comment-section-panel-content">
+		<!-- ... (panel-header, main-comment-input-area remain the same) ... -->
 		<div class="panel-header">
 				<h3 class="article-title-header">{articleTitle}</h3>
 				<h4 class="comments-count-header">
@@ -117,8 +120,9 @@
 										allComments={allCommentsForArticle}
 										onReply={handleReplyInitiated}
 										onPostReply={handlePostReplyFromItem}
-										currentArticleId={articleId}
-										level={0}
+										{onModerateComment}
+										currentArticleId = {articleId}
+								level={0}
 								/>
 						{/each}
 				{:else if !isLoading}

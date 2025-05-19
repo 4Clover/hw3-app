@@ -277,6 +277,39 @@
             postCommentErrors = { ...postCommentErrors, [articleId]: e.message || 'Unknown error posting reply.' };
         }
     }
+    
+    // -- Moderate Comment API ---
+    async function handleModerateComment(detail: {
+        commentId: string;
+        action: 'delete_full' | 'redact_partial';
+        newContent?: string;
+    }): Promise<boolean> {
+        const { commentId, action, newContent } = detail;
+        try {
+            const response = await fetch(`/api/comments/${commentId}/moderate`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, new_content: newContent }) // new content for backend
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `HTTP error ${response.status}`}));
+                console.error('Moderation failed:', errorData.error);
+                alert(`Moderation failed: ${errorData.error}`);
+                return false;
+            }
+
+            // refresh comments list
+            await fetchAllComments();
+            return true;
+        } catch (e: any) {
+            console.error('Error during comment moderation:', e);
+            alert(`An error occurred during moderation: ${e.message}`);
+            return false;
+        }
+    }
+    
+    
 
     // --- Infinite Scroll Observer Function ---
     function onIntersection(entries: IntersectionObserverEntry[]) {
@@ -496,6 +529,7 @@
 										postError={postCommentErrors[currentPanelArticleId] || null}
 										onPostNewComment={handlePostNewTopLevelComment}
 										onPostNewReply={handlePostNewReplyComment}
+										onModerateComment={handleModerateComment}
 								/>
 						{:else}
 								<p style="padding:20px; text-align:center;">Loading panel content...</p>
